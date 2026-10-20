@@ -300,6 +300,16 @@ cleanup_zen_theme() {
     done
 }
 
+cleanup_gimp_theme() {
+    local hook
+
+    for hook in "$HOOK_DIR"/*-gimp.sh "$HOOK_DIR"/*-gimp.sh.sample; do
+        [[ -f "$hook" ]] || continue
+        bash "$hook" --cleanup >/dev/null 2>&1 || true
+        return 0
+    done
+}
+
 cleanup_firefox_theme() {
     local hook
 
@@ -490,6 +500,11 @@ post_disable() {
             cleanup_firefox_theme
             printf '%sRemoved THPM-managed Firefox theme imports.\n' "$(dot warn)"
             printf '%sRestart Firefox to clear active browser chrome styles.\n' "$(dot muted)"
+        ;;
+        "gimp")
+            cleanup_gimp_theme
+            printf '%sRemoved THPM-managed GIMP colors from gimp.css.\n' "$(dot warn)"
+            printf '%sRestart GIMP to return to its default theme colors.\n' "$(dot muted)"
         ;;
         "gtk")
             if command -v gsettings >/dev/null 2>&1; then
@@ -1014,6 +1029,19 @@ doctor_check_plugin_specific() {
             doctor_check_file "$THPM_CURRENT_THEME_DIR/tmux.conf" "Omarchy tmux theme"
         ;;
         vicinae) doctor_check_command vicinae Vicinae ;;
+        gimp)
+            if command -v gimp >/dev/null 2>&1 || command -v gimp-3 >/dev/null 2>&1 ||
+                { command -v flatpak >/dev/null 2>&1 && flatpak info org.gimp.GIMP >/dev/null 2>&1; }; then
+                doctor_ok "GIMP command found"
+            else
+                doctor_warn "GIMP command missing"
+            fi
+            if compgen -G "$HOME/.config/GIMP/3.*" >/dev/null || compgen -G "$HOME/.var/app/org.gimp.GIMP/config/GIMP/3.*" >/dev/null; then
+                doctor_ok "GIMP 3 config directory found"
+            else
+                doctor_warn "GIMP 3 config directory missing; start GIMP once"
+            fi
+        ;;
         typora) doctor_check_command typora Typora ;;
         nwg-dock-hyprland) doctor_check_command nwg-dock-hyprland "nwg-dock-hyprland" ;;
         zed)

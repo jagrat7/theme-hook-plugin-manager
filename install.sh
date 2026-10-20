@@ -39,6 +39,7 @@ bundled_plugins=(
     10-tmux.sh
     10-vicinae.sh
     10-zellij.sh
+    15-gimp.sh
     15-typora.sh
     20-nwg-dock-hyprland.sh
     20-zed.sh
