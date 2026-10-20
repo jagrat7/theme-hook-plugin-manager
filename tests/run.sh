@@ -1800,6 +1800,119 @@ EOF
   assert_contains "$(cat "$notify_log")" "Qutebrowser" "qutebrowser restart notification lists app"
 }
 
+test_gimp_plugin_writes_managed_block_and_preserves_user_css() {
+  local home_dir="$TMP_ROOT/gimp-home"
+  local bin_dir="$TMP_ROOT/gimp-bin"
+  local hook_dir="$home_dir/.config/omarchy/hooks/theme-set.d"
+  local css_file="$home_dir/.config/GIMP/3.2/gimp.css"
+  local flatpak_css_file="$home_dir/.var/app/org.gimp.GIMP/config/GIMP/3.0/gimp.css"
+  local css
+
+  write_colors_fixture "$home_dir"
+  mkdir -p "$hook_dir" "$bin_dir" "$(dirname "$css_file")" "$(dirname "$flatpak_css_file")"
+  cp "$ROOT_DIR/theme-set.d/15-gimp.sh" "$hook_dir/15-gimp.sh"
+  chmod +x "$hook_dir/15-gimp.sh"
+  printf 'menu { font-size: 12px; }\n' > "$css_file"
+  make_stub_bin "$bin_dir" gimp 'exit 0'
+  make_stub_bin "$bin_dir" pgrep 'exit 1'
+  make_stub_bin "$bin_dir" notify-send 'exit 0'
+
+  PATH="$bin_dir:$PATH" run_theme_hooks "$home_dir" >/dev/null
+  css="$(cat "$css_file")"
+
+  assert_contains "$css" "/* thpm-gimp-theme-start */" "gimp plugin writes managed block start"
+  assert_contains "$css" "/* thpm-gimp-theme-end */" "gimp plugin writes managed block end"
+  assert_contains "$css" "@define-color fg-color               #f1f2f3;" "gimp plugin uses primary foreground"
+  assert_contains "$css" "@define-color widget-bg-color        #101112;" "gimp plugin uses primary background for widgets"
+  assert_contains "$css" "@define-color selected-color         #222222;" "gimp plugin falls back to selection_background"
+  assert_contains "$css" "@define-color bg-color               #1c1d1e;" "gimp plugin derives panel color without lighter_background"
+  assert_eq "menu { font-size: 12px; }" "$(tail -n 1 "$css_file")" "gimp plugin keeps user rules after the managed block"
+  assert_file_exists "$flatpak_css_file" "gimp plugin writes Flatpak GIMP config"
+}
+
+test_gimp_plugin_prefers_named_colors_and_replaces_block() {
+  local home_dir="$TMP_ROOT/gimp-named-home"
+  local bin_dir="$TMP_ROOT/gimp-named-bin"
+  local hook_dir="$home_dir/.config/omarchy/hooks/theme-set.d"
+  local css_file="$home_dir/.config/GIMP/3.2/gimp.css"
+  local css
+
+  write_colors_fixture "$home_dir"
+  cat >> "$home_dir/.local/state/omarchy/current/theme/colors.toml" <<'COLORS'
+accent = "#cc432e"
+selection = "#3d1f1c"
+muted = "#785c56"
+lighter_background = "#211312"
+dark_background = "#0f0808"
+darker_background = "#090505"
+dark_foreground = "#896d65"
+COLORS
+  mkdir -p "$hook_dir" "$bin_dir" "$(dirname "$css_file")"
+  cp "$ROOT_DIR/theme-set.d/15-gimp.sh" "$hook_dir/15-gimp.sh"
+  chmod +x "$hook_dir/15-gimp.sh"
+  make_stub_bin "$bin_dir" gimp 'exit 0'
+  make_stub_bin "$bin_dir" pgrep 'exit 1'
+  make_stub_bin "$bin_dir" notify-send 'exit 0'
+
+  PATH="$bin_dir:$PATH" run_theme_hooks "$home_dir" >/dev/null
+  PATH="$bin_dir:$PATH" run_theme_hooks "$home_dir" >/dev/null
+  css="$(cat "$css_file")"
+
+  assert_eq "1" "$(grep -cFx '/* thpm-gimp-theme-start */' "$css_file")" "gimp plugin replaces its block instead of duplicating it"
+  assert_contains "$css" "@define-color bg-color               #211312;" "gimp plugin uses lighter_background for panels"
+  assert_contains "$css" "@define-color selected-color         #3d1f1c;" "gimp plugin uses selection color"
+  assert_contains "$css" "@define-color border-color           #090505;" "gimp plugin uses darker_background for borders"
+  assert_contains "$css" "@define-color hover-color            #54211a;" "gimp plugin mixes accent into hover color"
+}
+
+test_gimp_plugin_skips_without_config_dir() {
+  local home_dir="$TMP_ROOT/gimp-noconfig-home"
+  local bin_dir="$TMP_ROOT/gimp-noconfig-bin"
+  local hook_dir="$home_dir/.config/omarchy/hooks/theme-set.d"
+  local output
+
+  write_colors_fixture "$home_dir"
+  mkdir -p "$hook_dir" "$bin_dir"
+  cp "$ROOT_DIR/theme-set.d/15-gimp.sh" "$hook_dir/15-gimp.sh"
+  chmod +x "$hook_dir/15-gimp.sh"
+  make_stub_bin "$bin_dir" gimp 'exit 0'
+
+  output="$(PATH="$bin_dir:$PATH" run_theme_hooks "$home_dir" 2>&1)"
+
+  assert_contains "$output" "GIMP config directory not found" "gimp plugin skips until GIMP has created its config"
+  assert_not_contains "$output" "Hook failed" "gimp plugin skip does not fail the hook"
+  assert_file_missing "$home_dir/.config/GIMP" "gimp plugin does not create a GIMP config directory"
+}
+
+test_gimp_plugin_cleanup_removes_only_managed_block() {
+  local home_dir="$TMP_ROOT/gimp-cleanup-home"
+  local hook_dir="$home_dir/.config/omarchy/hooks/theme-set.d"
+  local user_css_file="$home_dir/.config/GIMP/3.2/gimp.css"
+  local managed_only_file="$home_dir/.config/GIMP/3.0/gimp.css"
+  local output
+
+  mkdir -p "$hook_dir" "$(dirname "$user_css_file")" "$(dirname "$managed_only_file")"
+  cp "$ROOT_DIR/theme-set.d/15-gimp.sh" "$hook_dir/15-gimp.sh"
+  chmod +x "$hook_dir/15-gimp.sh"
+  cat > "$user_css_file" <<'CSS'
+/* thpm-gimp-theme-start */
+@define-color fg-color #ffffff;
+/* thpm-gimp-theme-end */
+menu { font-size: 12px; }
+CSS
+  cat > "$managed_only_file" <<'CSS'
+/* thpm-gimp-theme-start */
+@define-color fg-color #ffffff;
+/* thpm-gimp-theme-end */
+CSS
+
+  output="$(run_thpm "$home_dir" disable gimp)"
+
+  assert_contains "$output" "Removed THPM-managed GIMP colors" "thpm disable gimp reports cleanup"
+  assert_eq "menu { font-size: 12px; }" "$(cat "$user_css_file")" "gimp cleanup keeps user rules"
+  assert_file_missing "$managed_only_file" "gimp cleanup removes a gimp.css it fully owned"
+}
+
 test_fzf_plugin_writes_fish_theme() {
   local home_dir="$TMP_ROOT/fzf-home"
   local bin_dir="$TMP_ROOT/fzf-bin"
@@ -3233,6 +3346,7 @@ print_coverage_summary() {
     "$ROOT_DIR/theme-set.d/10-superfile.sh"
     "$ROOT_DIR/theme-set.d/10-tmux.sh"
     "$ROOT_DIR/theme-set.d/10-zellij.sh"
+    "$ROOT_DIR/theme-set.d/15-gimp.sh"
     "$ROOT_DIR/theme-set.d/25-swaync.sh"
     "$ROOT_DIR/theme-set.d/26-foot-live-colors.sh"
     "$ROOT_DIR/theme-set.d/35-obsidian-terminal.sh"
@@ -3521,6 +3635,10 @@ main() {
   test_zen_plugin_repairs_incomplete_managed_import_block
   test_qutebrowser_plugin_writes_theme_and_config
   test_qutebrowser_light_mode_change_requires_restart
+  test_gimp_plugin_writes_managed_block_and_preserves_user_css
+  test_gimp_plugin_prefers_named_colors_and_replaces_block
+  test_gimp_plugin_skips_without_config_dir
+  test_gimp_plugin_cleanup_removes_only_managed_block
   test_fzf_plugin_writes_fish_theme
   test_fish_plugin_writes_shell_colors
   test_obsidian_terminal_plugin_discovers_registered_vault

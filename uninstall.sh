@@ -51,6 +51,7 @@ bundled_plugins=(
     10-tmux.sh
     10-vicinae.sh
     10-zellij.sh
+    15-gimp.sh
     15-typora.sh
     20-nwg-dock-hyprland.sh
     20-zed.sh
@@ -79,6 +80,12 @@ done
 for firefox_hook in "$HOME"/.config/omarchy/hooks/theme-set.d/*-firefox.sh "$HOME"/.config/omarchy/hooks/theme-set.d/*-firefox.sh.sample; do
     [[ -f "$firefox_hook" ]] || continue
     bash "$firefox_hook" --cleanup > /dev/null 2>&1 || true
+    break
+done
+
+for gimp_hook in "$HOME"/.config/omarchy/hooks/theme-set.d/*-gimp.sh "$HOME"/.config/omarchy/hooks/theme-set.d/*-gimp.sh.sample; do
+    [[ -f "$gimp_hook" ]] || continue
+    bash "$gimp_hook" --cleanup > /dev/null 2>&1 || true
     break
 done
 

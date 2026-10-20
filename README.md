@@ -79,13 +79,24 @@ theme "current"
 
 Inline themes in `config.kdl` are hot-reloaded by Zellij. If the active Omarchy theme ships `zellij.kdl`, that theme is embedded in the managed block; otherwise the plugin generates a Zellij theme from `colors.toml`.
 
+### GIMP
+
+The GIMP plugin recolors GIMP 3's Default theme by writing a managed block to the user stylesheet in each GIMP 3 config directory:
+
+```text
+~/.config/GIMP/3.x/gimp.css
+~/.var/app/org.gimp.GIMP/config/GIMP/3.x/gimp.css
+```
+
+Start GIMP once before running `thpm run` so GIMP creates its config directory. Only the text between `thpm-gimp-theme-start` and `thpm-gimp-theme-end` is replaced; your own rules after it are kept and still win. GIMP reads `gimp.css` on startup, so restart GIMP after a theme change. `thpm disable gimp` and `thpm remove` take the managed block back out.
+
 ## Supported Plugins
 
 **Browsers:** Firefox, Qutebrowser, Zen Browser
 
 **Editors and writing:** Cursor, Obsidian Terminal plugin, Typora, VS Code, Windsurf, Zed
 
-**Desktop and UI:** Discord clients using Vencord-compatible themes, optional Discord System24 theme, GTK apps, Hermes, nwg-dock-hyprland, Omarchy branding, Qt6 apps using qt6ct, SwayNC, Vicinae
+**Desktop and UI:** Discord clients using Vencord-compatible themes, optional Discord System24 theme, GIMP 3, GTK apps, Hermes, nwg-dock-hyprland, Omarchy branding, Qt6 apps using qt6ct, SwayNC, Vicinae
 
 **Terminal and CLI:** cliamp, Cava, Fish, Foot live colors, fzf, Superfile, tmux, Zellij
 
